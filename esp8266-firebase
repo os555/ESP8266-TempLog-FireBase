@@ -1,0 +1,169 @@
+// First we include the libraries
+#include <OneWire.h> 
+#include <DallasTemperature.h>
+#include <ESP8266WiFi.h>
+#include <FirebaseArduino.h>
+#include <ESP8266Ping.h>
+/********************************************************************/
+// Data wire is plugged into pin D4 NodeMCU
+#define ONE_WIRE_BUS D4
+#define TooYen_relay D2
+// Setup a oneWire instance to communicate with any OneWire devices  
+// (not just Maxim/Dallas temperature ICs) 
+OneWire oneWire(ONE_WIRE_BUS); 
+/********************************************************************/
+// Pass our oneWire reference to Dallas Temperature. 
+DallasTemperature sensors(&oneWire);
+/********************************************************************/ 
+
+#define WIFI_SSID       "xxxxxxxxxxxx"
+#define WIFI_PASSWORD   "xxxxxxxxxxxxxxx"
+#define FIREBASE_HOST "xxxxxxxxxxxxxxxx.firebaseio.com"
+#define FIREBASE_AUTH "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+
+
+
+
+
+int SETSTATUS=1;
+int PINGCOUNT =0;
+ int OFFLINECOUNT = 0;
+
+
+void setup() {
+
+Serial.begin(9600);
+
+// Clear WiFi setting by disable
+ WiFi.disconnect();
+ WiFi.mode(WIFI_OFF);
+ WiFi.mode(WIFI_STA); //  wifi setting as Station mode
+  
+// Enables Wifi
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  Serial.print("connecting");
+  while (WiFi.status() != WL_CONNECTED) {
+    Serial.print(".");
+    delay(500);
+    int i = i+1;
+    if(i==200){
+      break;
+    }
+  }
+  Serial.println();
+  Serial.print("connected: ");
+  Serial.println(WiFi.localIP());
+
+
+ // Start up the library 
+ sensors.begin(); 
+  
+  pinMode(LED_BUILTIN, OUTPUT);
+  pinMode(TooYen_relay, OUTPUT);
+  digitalWrite(TooYen_relay, HIGH);
+
+  Firebase.begin(FIREBASE_HOST, FIREBASE_AUTH);
+  Firebase.setInt("TooYen01/STATUS", 1); // Set status of GPIO to ON at Start
+  //Firebase.setInt("TooYen01/MAXTEMP", 23); // Set Max temperature
+  Firebase.setInt("TooYen01/ONLINE", 1); // Set Min temperature
+  Firebase.setInt("TooYen01/RESETESP", 0); // Set Min temperature
+   Firebase.setString("TooYen01/IP", IPADDR);
+}
+
+void loop() {
+
+
+  sensors.requestTemperatures(); // Send the command to get temperature readings 
+  digitalWrite(LED_BUILTIN, SETSTATUS);
+  digitalWrite(TooYen_relay, SETSTATUS);
+   // digitalWrite(TooYen_relay, HIGH);
+  
+
+ Serial.print(" OuNaPhoom man : "); 
+ Serial.print(sensors.getTempCByIndex(0)); // Why "byIndex"? 
+ Firebase.setInt("TooYen01/Temp", sensors.getTempCByIndex(0)); 
+   // You can have more than one DS18B20 on the same bus.  
+   // 0 refers to the first IC on the wire 
+
+
+ if(Firebase.getInt("TooYen01/RESETESP")!=0)
+ {
+  Firebase.setInt("TooYen01/RESETESP", 0); // Set Min temperature
+  ESP.restart();
+ }
+
+  
+// if online Check temp in range 
+
+
+ if(Firebase.getInt("TooYen01/ONLINE")==1)
+
+  {
+     Firebase.setInt("TooYen01/STATUS", 1);
+     digitalWrite(TooYen_relay, 1);
+      SETSTATUS = 1;
+    Serial.println(SETSTATUS); 
+   }
+
+
+   
+ if(Firebase.getInt("TooYen01/STATUS")==1)
+
+  {
+     Firebase.setInt("TooYen01/STATUS", 1);
+     digitalWrite(TooYen_relay, 1);
+      SETSTATUS = 1;
+    Serial.println(SETSTATUS); 
+   }
+
+
+
+   // Turn oFF
+   if(Firebase.getInt("TooYen01/STATUS")==2)  
+   {
+     Firebase.setInt("TooYen01/STATUS", 0);
+    Firebase.setInt(" TooYen01/ONLINE", 0);
+     digitalWrite(TooYen_relay, 0);
+      SETSTATUS = 0;
+        Serial.println(SETSTATUS); 
+   }
+
+const IPAddress remote_ip(192,168,55,22); // Remote host
+Serial.println(remote_ip);
+if (Ping.ping(remote_ip)) {
+Serial.println("Success!!");
+PINGCOUNT = 0;
+} else {
+     Serial.println("Host DOWN!!");
+     PINGCOUNT += 1;
+    if(PINGCOUNT==5){
+     Firebase.setInt("TooYen01/STATUS", 0);
+     digitalWrite(TooYen_relay, 0);
+     SETSTATUS = 0;
+    // PINGCOUNT =0;
+  }
+
+   Serial.println(PINGCOUNT);
+
+} // ping host
+
+
+   if(Firebase.getInt("TooYen01/STATUS")==0)  
+   {
+     OFFLINECOUNT += 1;
+    if(OFFLINECOUNT==5){
+     Firebase.setInt("TooYen01/STATUS", 0);
+     digitalWrite(TooYen_relay, 0);
+     SETSTATUS = 0;
+     
+    }
+       Serial.println(OFFLINECOUNT); 
+   }else {
+      OFFLINECOUNT = 0;
+   }
+
+
+   delay(600); 
+   Serial.println(WiFi.localIP());
+
+}
